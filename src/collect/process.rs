@@ -93,7 +93,7 @@ pub fn aggregate(procs: &[ProcessSnapshot]) -> Vec<ProcessGroup> {
     map.into_values().collect()
 }
 
-pub fn sort_groups(groups: &mut Vec<ProcessGroup>, sort_by: SortBy) {
+pub fn sort_groups(groups: &mut [ProcessGroup], sort_by: SortBy) {
     match sort_by {
         SortBy::Cpu => groups.sort_by(|a, b| {
             b.total_cpu
