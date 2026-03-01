@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use sysinfo::System;
 
 #[derive(Clone, Debug)]
@@ -8,6 +10,15 @@ pub struct ProcessSnapshot {
     pub memory_bytes: u64,
     pub gpu_mem_bytes: u64,
     pub status: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProcessGroup {
+    pub name: String,
+    pub count: usize,
+    pub total_cpu: f32,
+    pub total_memory: u64,
+    pub total_gpu_mem: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,4 +73,37 @@ pub fn collect(sys: &System, sort_by: SortBy, filter: Option<&str>) -> Vec<Proce
     }
 
     procs
+}
+
+pub fn aggregate(procs: &[ProcessSnapshot]) -> Vec<ProcessGroup> {
+    let mut map: HashMap<String, ProcessGroup> = HashMap::new();
+    for p in procs {
+        let entry = map.entry(p.name.clone()).or_insert(ProcessGroup {
+            name: p.name.clone(),
+            count: 0,
+            total_cpu: 0.0,
+            total_memory: 0,
+            total_gpu_mem: 0,
+        });
+        entry.count += 1;
+        entry.total_cpu += p.cpu_percent;
+        entry.total_memory += p.memory_bytes;
+        entry.total_gpu_mem += p.gpu_mem_bytes;
+    }
+    map.into_values().collect()
+}
+
+pub fn sort_groups(groups: &mut Vec<ProcessGroup>, sort_by: SortBy) {
+    match sort_by {
+        SortBy::Cpu => groups.sort_by(|a, b| {
+            b.total_cpu
+                .partial_cmp(&a.total_cpu)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }),
+        SortBy::Memory => groups.sort_by(|a, b| b.total_memory.cmp(&a.total_memory)),
+        SortBy::Gpu => groups.sort_by(|a, b| b.total_gpu_mem.cmp(&a.total_gpu_mem)),
+        SortBy::Pid | SortBy::Name => {
+            groups.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        }
+    }
 }

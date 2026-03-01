@@ -4,7 +4,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Cell, Row, Table, TableState}
 use ratatui::Frame;
 
 use crate::collect::memory::format_bytes;
-use crate::collect::process::{ProcessSnapshot, SortBy};
+use crate::collect::process::{self, ProcessSnapshot, SortBy};
 use crate::ui::theme;
 
 pub fn draw(
@@ -41,9 +41,14 @@ pub fn draw(
             .collect()
     };
 
+    // Aggregate into groups
+    let owned: Vec<ProcessSnapshot> = filtered.into_iter().cloned().collect();
+    let mut groups = process::aggregate(&owned);
+    process::sort_groups(&mut groups, sort_by);
+
     // Sort indicator in header
     let header_cells = [
-        ("PID", SortBy::Pid),
+        ("#", SortBy::Name),
         ("NAME", SortBy::Name),
         ("CPU%", SortBy::Cpu),
         ("MEM", SortBy::Memory),
@@ -61,23 +66,28 @@ pub fn draw(
     }))
     .height(1);
 
-    let rows: Vec<Row> = filtered
+    let rows: Vec<Row> = groups
         .iter()
         .enumerate()
-        .map(|(i, p)| {
-            let cpu_style = theme::percent_style(p.cpu_percent);
-            let gpu_text = if p.gpu_mem_bytes > 0 {
-                format_bytes(p.gpu_mem_bytes)
+        .map(|(i, g)| {
+            let cpu_style = theme::percent_style(g.total_cpu);
+            let gpu_text = if g.total_gpu_mem > 0 {
+                format_bytes(g.total_gpu_mem)
             } else {
                 "-".to_string()
             };
+            let display_name = if g.count > 1 {
+                format!("{} (\u{00d7}{})", g.name, g.count)
+            } else {
+                g.name.clone()
+            };
             let row = Row::new(vec![
-                Cell::from(format!("{}", p.pid)),
-                Cell::from(p.name.clone()),
-                Cell::from(Span::styled(format!("{:.1}", p.cpu_percent), cpu_style)),
-                Cell::from(format_bytes(p.memory_bytes)),
+                Cell::from(format!("{}", g.count)),
+                Cell::from(display_name),
+                Cell::from(Span::styled(format!("{:.1}", g.total_cpu), cpu_style)),
+                Cell::from(format_bytes(g.total_memory)),
                 Cell::from(gpu_text),
-                Cell::from(Span::styled(&p.status, theme::MUTED)),
+                Cell::from(Span::styled("-", theme::MUTED)),
             ]);
             if i % 2 == 1 {
                 row.style(theme::ALT_ROW)
@@ -102,8 +112,8 @@ pub fn draw(
         .row_highlight_style(theme::HIGHLIGHT);
 
     let mut state = TableState::default();
-    if !filtered.is_empty() {
-        state.select(Some(scroll.min(filtered.len().saturating_sub(1))));
+    if !groups.is_empty() {
+        state.select(Some(scroll.min(groups.len().saturating_sub(1))));
     }
 
     f.render_stateful_widget(table, area, &mut state);

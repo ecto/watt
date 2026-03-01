@@ -2,6 +2,7 @@ pub mod app;
 pub mod cpu_view;
 pub mod header;
 pub mod process_view;
+pub mod profile_view;
 pub mod sparkline;
 pub mod theme;
 
@@ -184,7 +185,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
             // Compute column x-ranges from the same widths used in process_view
             let col_defs: [(SortBy, u16); 6] = [
-                (SortBy::Pid, 7),
+                (SortBy::Name, 7),  // # column — sorts by name (PID meaningless grouped)
                 (SortBy::Name, 20), // Min(20) — approximate
                 (SortBy::Cpu, 8),
                 (SortBy::Memory, 8),
@@ -208,6 +209,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
                 cx += w + 1; // +1 for column gap
             }
             app.layout.col_ranges = col_ranges;
+        }
+        View::Profile => {
+            app.layout.metric_rects.clear();
+            app.layout.table_area = None;
+            app.layout.col_ranges.clear();
+
+            profile_view::draw(f, outer[1], &app.profile_state, &mut app.profile_scroll);
         }
     }
 }
