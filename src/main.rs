@@ -40,15 +40,25 @@ async fn main() -> Result<()> {
         tokio::select! {
             Some(snap) = snap_tokio_rx.recv() => {
                 app.update(snap);
-                terminal.draw(|f| ui::draw(f, &app))?;
+                terminal.draw(|f| ui::draw(f, &mut app))?;
             }
             Some(Ok(evt)) = event_stream.next() => {
-                if let Event::Key(key) = evt {
-                    app.on_key(key);
-                    if app.should_quit {
-                        break;
+                match evt {
+                    Event::Key(key) => {
+                        app.on_key(key);
+                        if app.should_quit {
+                            break;
+                        }
+                        terminal.draw(|f| ui::draw(f, &mut app))?;
                     }
-                    terminal.draw(|f| ui::draw(f, &app))?;
+                    Event::Mouse(me) => {
+                        app.on_mouse(me);
+                        if app.should_quit {
+                            break;
+                        }
+                        terminal.draw(|f| ui::draw(f, &mut app))?;
+                    }
+                    _ => {}
                 }
             }
         }

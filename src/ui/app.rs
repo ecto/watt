@@ -1,4 +1,5 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 
 use crate::collect::process::SortBy;
 use crate::collect::SystemSnapshot;
@@ -34,6 +35,15 @@ impl Metric {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct LayoutCache {
+    pub metric_rects: Vec<(Metric, Rect)>,
+    pub table_area: Option<Rect>,
+    pub table_header_y: Option<u16>,
+    pub table_first_row_y: Option<u16>,
+    pub col_ranges: Vec<(SortBy, u16, u16)>,
+}
+
 pub struct App {
     pub should_quit: bool,
 
@@ -49,6 +59,9 @@ pub struct App {
     pub disk_history: RingBuffer<f32>,
     pub pwr_history: RingBuffer<f32>,
 
+    // Per-core CPU history (lazily initialized on first snapshot)
+    pub per_core_history: Vec<RingBuffer<f32>>,
+
     // Process table state
     pub sort_by: SortBy,
     pub proc_scroll: usize,
@@ -57,6 +70,9 @@ pub struct App {
 
     // Latest snapshot
     pub snapshot: Option<SystemSnapshot>,
+
+    // Layout cache for mouse hit-testing (populated during draw)
+    pub layout: LayoutCache,
 }
 
 impl App {
@@ -71,11 +87,13 @@ impl App {
             net_history: RingBuffer::new(HISTORY_LEN),
             disk_history: RingBuffer::new(HISTORY_LEN),
             pwr_history: RingBuffer::new(HISTORY_LEN),
+            per_core_history: Vec::new(),
             sort_by: SortBy::Cpu,
             proc_scroll: 0,
             filter_mode: false,
             filter_text: String::new(),
             snapshot: None,
+            layout: LayoutCache::default(),
         }
     }
 
@@ -154,6 +172,19 @@ impl App {
         if let Some(w) = snap.power.system_watts {
             self.pwr_history.push(w);
         }
+
+        // Lazily init per-core history on first snapshot
+        if self.per_core_history.is_empty() && !snap.cpu.per_core.is_empty() {
+            self.per_core_history = (0..snap.cpu.per_core.len())
+                .map(|_| RingBuffer::new(HISTORY_LEN))
+                .collect();
+        }
+        for (i, &usage) in snap.cpu.per_core.iter().enumerate() {
+            if let Some(buf) = self.per_core_history.get_mut(i) {
+                buf.push(usage);
+            }
+        }
+
         self.snapshot = Some(snap);
     }
 
@@ -174,6 +205,91 @@ impl App {
         match self.view {
             View::Chart => self.on_key_chart(key),
             View::Processes => self.on_key_processes(key),
+        }
+    }
+
+    pub fn on_mouse(&mut self, event: MouseEvent) {
+        match self.view {
+            View::Chart => self.on_mouse_chart(event),
+            View::Processes => self.on_mouse_processes(event),
+        }
+    }
+
+    fn on_mouse_chart(&mut self, event: MouseEvent) {
+        let x = event.column;
+        let y = event.row;
+
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                for &(metric, rect) in &self.layout.metric_rects {
+                    if x >= rect.x
+                        && x < rect.x + rect.width
+                        && y >= rect.y
+                        && y < rect.y + rect.height
+                    {
+                        if metric == self.selected_metric {
+                            // Click on already-selected → drill down
+                            if let Some(sort) = metric.to_sort_by() {
+                                self.sort_by = sort;
+                            }
+                            self.proc_scroll = 0;
+                            self.view = View::Processes;
+                        } else {
+                            self.selected_metric = metric;
+                        }
+                        return;
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                let i = self.metric_index();
+                if i + 1 < self.metric_count() {
+                    self.selected_metric = self.metric_from_index(i + 1);
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                let i = self.metric_index();
+                if i > 0 {
+                    self.selected_metric = self.metric_from_index(i - 1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn on_mouse_processes(&mut self, event: MouseEvent) {
+        let x = event.column;
+        let y = event.row;
+
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Click on header → sort
+                if let Some(header_y) = self.layout.table_header_y {
+                    if y == header_y {
+                        for &(sort_key, x_start, x_end) in &self.layout.col_ranges {
+                            if x >= x_start && x < x_end {
+                                self.sort_by = sort_key;
+                                return;
+                            }
+                        }
+                        return;
+                    }
+                }
+                // Click on data row → select
+                if let Some(first_row_y) = self.layout.table_first_row_y {
+                    if y >= first_row_y {
+                        let row_index = (y - first_row_y) as usize;
+                        self.proc_scroll = row_index;
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                self.proc_scroll = self.proc_scroll.saturating_add(3);
+            }
+            MouseEventKind::ScrollUp => {
+                self.proc_scroll = self.proc_scroll.saturating_sub(3);
+            }
+            _ => {}
         }
     }
 
