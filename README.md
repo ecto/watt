@@ -18,13 +18,14 @@ A terminal system monitor that actually knows your GPU exists.
 ╰─────────────────────────────────────────────────────╯
 ```
 
-<img src="assets/wat.png" width="60" align="left">
-
-*"other monitors just... pretend GPUs don't exist?"*
-
-<br clear="both">
+<table align="left"><tr><td align="center">
+<img src="assets/wat.png" width="60"><br>
+<sub><em>other monitors just<br>pretend GPUs don't exist?</em></sub>
+</td></tr></table>
 
 Real-time CPU, memory, GPU, network, disk, and power monitoring with per-core heatmaps, process grouping, and Claude-powered system analysis. Catppuccin Mocha theme. On Apple Silicon, reads GPU stats directly from the hardware — no sudo, no kernel extensions.
+
+<br clear="both">
 
 ## Install
 
@@ -71,9 +72,10 @@ ANTHROPIC_API_KEY=... watt -p     # auto-analyze on startup
 
 ### Apple Silicon GPU
 
-<img src="assets/wat.png" width="60" align="right">
-
-*"no sudo? no kernel extension? just... vibes?"*
+<table align="right"><tr><td align="center">
+<img src="assets/wat.png" width="60"><br>
+<sub><em>no sudo? no kernel<br>extension? just vibes?</em></sub>
+</td></tr></table>
 
 macOS exposes GPU frequency residency counters through a private IOReport API — the same one Activity Monitor uses internally. watt subscribes to these counters and derives utilization from active-vs-idle time. No kernel extension, no entitlement, no sudo. Apple just left the door open.
 
@@ -87,19 +89,21 @@ NVML via the `nvidia` feature flag. Per-process GPU memory shown in the process 
 
 ### Process Aggregation
 
-<img src="assets/wat.png" width="60" align="left">
-
-*"forty-seven Chrome Helpers???"*
-
-<br clear="both">
+<table align="left"><tr><td align="center">
+<img src="assets/wat.png" width="60"><br>
+<sub><em>forty-seven<br>Chrome Helpers???</em></sub>
+</td></tr></table>
 
 Processes are grouped by name into `ProcessGroup` structs via a HashMap. Each group sums CPU%, memory, and GPU memory across all PIDs sharing that name. The table shows count, aggregated metrics, and a `×N` suffix.
 
+<br clear="both">
+
 ### Claude Profile
 
-<img src="assets/wat.png" width="60" align="right">
-
-*"it asks an AI what your computer is doing?"*
+<table align="right"><tr><td align="center">
+<img src="assets/wat.png" width="60"><br>
+<sub><em>it asks an AI what your<br>computer is doing?</em></sub>
+</td></tr></table>
 
 `P` or `--profile` builds a text prompt from the current snapshot — system stats plus the top 50 aggregated processes — and POSTs to the Claude Messages API (`claude-sonnet-4-20250514`, 1024 tokens). The response streams into a scrollable view. Requires `ANTHROPIC_API_KEY` env var.
 
