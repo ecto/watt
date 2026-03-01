@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex, CFArrayRef};
 use core_foundation::base::{
-    kCFAllocatorDefault, kCFAllocatorNull, CFAllocatorRef, CFRange, CFRelease, CFTypeRef,
+    kCFAllocatorDefault, kCFAllocatorNull, CFRange, CFRelease, CFTypeRef,
 };
 use core_foundation::data::{CFDataGetBytes, CFDataGetLength, CFDataRef};
 use core_foundation::dictionary::{
@@ -123,38 +123,7 @@ unsafe extern "C" {
     fn IOReportStateGetResidency(a: CFDictionaryRef, b: i32) -> i64;
 }
 
-#[link(name = "IOKit", kind = "framework")]
-unsafe extern "C" {
-    fn IOServiceMatching(name: *const i8) -> CFMutableDictionaryRef;
-    fn IOServiceGetMatchingServices(
-        mainPort: u32,
-        matching: CFDictionaryRef,
-        existing: *mut u32,
-    ) -> i32;
-    fn IOIteratorNext(iterator: u32) -> u32;
-    fn IORegistryEntryGetName(entry: u32, name: *mut i8) -> i32;
-    fn IORegistryEntryCreateCFProperties(
-        entry: u32,
-        properties: *mut CFMutableDictionaryRef,
-        allocator: CFAllocatorRef,
-        options: u32,
-    ) -> i32;
-    fn IOObjectRelease(obj: u32) -> u32;
-    fn IOServiceOpen(device: u32, a: u32, b: u32, c: *mut u32) -> i32;
-    fn IOServiceClose(conn: u32) -> i32;
-    fn IOConnectCallStructMethod(
-        conn: u32,
-        selector: u32,
-        ival: *const c_void,
-        isize: usize,
-        oval: *mut c_void,
-        osize: *mut usize,
-    ) -> i32;
-}
-
-extern "C" {
-    fn mach_task_self() -> u32;
-}
+use super::iokit_ffi::*;
 
 // ── IOReport helpers ────────────────────────────────────────────────
 
@@ -595,6 +564,7 @@ pub struct AppleGpuBackend {
     gpu_name: String,
     #[allow(dead_code)]
     gpu_freqs: Vec<u32>,
+    system_power_watts: Option<f32>,
 }
 
 // All fields are only accessed from the single collector thread.
@@ -623,6 +593,7 @@ impl AppleGpuBackend {
             gpu_temp_keys,
             gpu_name,
             gpu_freqs,
+            system_power_watts: None,
         })
     }
 
@@ -654,6 +625,14 @@ impl AppleGpuBackend {
 }
 
 impl GpuBackend for AppleGpuBackend {
+    fn process_gpu_usage(&mut self) -> Vec<(u32, u64)> {
+        vec![] // no public macOS API for per-process GPU memory
+    }
+
+    fn system_power_watts(&self) -> Option<f32> {
+        self.system_power_watts
+    }
+
     fn collect(&mut self) -> Vec<GpuSnapshot> {
         let cur = match self.raw_sample() {
             Some(s) => s,
@@ -685,12 +664,20 @@ impl GpuBackend for AppleGpuBackend {
         }
 
         let mut gpu_power = None;
+        let mut system_power = 0.0f32;
+        let mut has_energy = false;
         let mut gpu_util = 0.0f32;
 
         // IOReportIter takes ownership of delta and releases it on Drop
         for item in IOReportIter::new(delta) {
-            if item.group == "Energy Model" && item.channel == "GPU Energy" {
-                gpu_power = cfio_watts(item.item, &item.unit, dt_ms);
+            if item.group == "Energy Model" {
+                if let Some(w) = cfio_watts(item.item, &item.unit, dt_ms) {
+                    system_power += w;
+                    has_energy = true;
+                    if item.channel == "GPU Energy" {
+                        gpu_power = Some(w);
+                    }
+                }
             }
 
             if item.group == "GPU Stats"
@@ -709,6 +696,8 @@ impl GpuBackend for AppleGpuBackend {
                 }
             }
         }
+
+        self.system_power_watts = if has_energy { Some(system_power) } else { None };
 
         let temperature = self.read_gpu_temp();
 

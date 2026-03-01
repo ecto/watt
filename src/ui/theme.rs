@@ -2,13 +2,16 @@ use ratatui::style::{Color, Modifier, Style};
 
 // Catppuccin Mocha palette
 const SURFACE0: Color = Color::Rgb(49, 50, 68);
-const SURFACE1: Color = Color::Rgb(69, 71, 90);
+pub const SURFACE1: Color = Color::Rgb(69, 71, 90);
 pub const TEXT: Color = Color::Rgb(205, 214, 244);
 const SUBTEXT1: Color = Color::Rgb(166, 173, 200);
 const SUBTEXT0: Color = Color::Rgb(108, 112, 134);
-const SKY: Color = Color::Rgb(137, 220, 235);
-const LAVENDER: Color = Color::Rgb(180, 190, 254);
-const PEACH: Color = Color::Rgb(250, 179, 135);
+pub const SKY: Color = Color::Rgb(137, 220, 235);
+pub const LAVENDER: Color = Color::Rgb(180, 190, 254);
+pub const PEACH: Color = Color::Rgb(250, 179, 135);
+pub const MAUVE: Color = Color::Rgb(203, 166, 247);
+pub const GREEN: Color = Color::Rgb(166, 227, 161);
+pub const TEAL: Color = Color::Rgb(148, 226, 213);
 // Gradient stops (used as tuples in percent_color)
 // GREEN (166,227,161) → TEAL (148,226,213) → YELLOW (249,226,175) → PEACH → RED (243,139,168)
 
@@ -17,8 +20,6 @@ pub const LABEL: Style = Style::new().fg(SUBTEXT1);
 pub const MUTED: Style = Style::new().fg(SUBTEXT0);
 pub const HIGHLIGHT: Style = Style::new().fg(SURFACE0).bg(SKY);
 pub const BORDER: Style = Style::new().fg(SURFACE1);
-pub const TAB_ACTIVE: Style = Style::new().fg(SKY).add_modifier(Modifier::BOLD);
-pub const TAB_INACTIVE: Style = Style::new().fg(SUBTEXT0);
 pub const ACCENT: Style = Style::new().fg(SKY).add_modifier(Modifier::BOLD);
 pub const ALT_ROW: Style = Style::new().bg(SURFACE0);
 pub const PEACH_STYLE: Style = Style::new().fg(PEACH).add_modifier(Modifier::BOLD);

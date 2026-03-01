@@ -1,6 +1,5 @@
 pub mod app;
 pub mod cpu_view;
-pub mod gpu_view;
 pub mod header;
 pub mod process_view;
 pub mod sparkline;
@@ -13,15 +12,11 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::text::Span;
-use ratatui::widgets::{Block, BorderType, Borders, Gauge, Tabs};
+use ratatui::layout::{Constraint, Layout};
 use ratatui::Frame;
 use ratatui::Terminal;
 
-use crate::collect::memory::format_bytes;
-use crate::collect::SystemSnapshot;
-use crate::ui::app::{App, Tab};
+use crate::ui::app::{App, View};
 
 pub type Term = Terminal<CrosstermBackend<io::Stdout>>;
 
@@ -56,127 +51,71 @@ pub fn draw(f: &mut Frame, app: &App) {
     };
 
     let size = f.area();
+    let outer = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(size);
 
-    // Layout: header(1) + tabs(1) + body(rest)
-    let outer = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .split(size);
-
-    // Header
     header::draw(f, outer[0], snap);
 
-    // Tabs bar
-    draw_tabs(f, outer[1], app.tab);
-
-    // Body
-    match app.tab {
-        Tab::Overview => draw_overview(f, outer[2], snap, app),
-        Tab::Cpu => cpu_view::draw_detail(f, outer[2], &snap.cpu, &app.per_core_history),
-        Tab::Gpu => gpu_view::draw(f, outer[2], &snap.gpus),
-        Tab::Processes => process_view::draw(
-            f,
-            outer[2],
-            &snap.processes,
-            app.sort_by,
-            app.proc_scroll,
-            app.filter_mode,
-            &app.filter_text,
-        ),
-    }
-}
-
-fn draw_tabs(f: &mut Frame, area: Rect, active: Tab) {
-    let titles: Vec<Span> = Tab::ALL
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            let num = i + 1;
-            let style = if *t == active {
-                theme::TAB_ACTIVE
-            } else {
-                theme::TAB_INACTIVE
+    match app.view {
+        View::Chart => {
+            cpu_view::draw_chart(f, outer[1], app);
+        }
+        View::Processes => {
+            let metric = app.selected_metric;
+            let (history, is_pct): (&crate::ui::sparkline::RingBuffer<f32>, bool) = match metric {
+                app::Metric::Cpu => (&app.cpu_history, true),
+                app::Metric::Mem => (&app.mem_history, true),
+                app::Metric::Gpu => (&app.gpu_history, true),
+                app::Metric::Net => (&app.net_history, false),
+                app::Metric::Disk => (&app.disk_history, false),
+                app::Metric::Pwr => (&app.pwr_history, false),
             };
-            if *t == active {
-                Span::styled(format!(" ● {num}:{} ", t.label()), style)
-            } else {
-                Span::styled(format!("   {num}:{} ", t.label()), style)
-            }
-        })
-        .collect();
 
-    let tabs = Tabs::new(titles)
-        .select(active.index())
-        .highlight_style(theme::TAB_ACTIVE);
-    f.render_widget(tabs, area);
-}
+            let strip_title = match metric {
+                app::Metric::Cpu => format!("CPU {:.1}%", snap.cpu.aggregate),
+                app::Metric::Mem => format!("MEM {:.1}%", snap.memory.ram_percent()),
+                app::Metric::Gpu => {
+                    let mut t = String::from("GPU");
+                    if let Some(gpu) = snap.gpus.first() {
+                        t = format!("GPU {:.1}%", gpu.utilization);
+                        if let Some(temp) = gpu.temperature {
+                            t.push_str(&format!(" {temp:.0}\u{00B0}C"));
+                        }
+                    }
+                    t
+                }
+                app::Metric::Net => format!(
+                    "NET \u{2193}{} \u{2191}{}",
+                    cpu_view::format_rate(snap.network.rx_bytes_sec),
+                    cpu_view::format_rate(snap.network.tx_bytes_sec),
+                ),
+                app::Metric::Disk => format!(
+                    "DISK R:{} W:{}",
+                    cpu_view::format_rate(snap.disk_io.read_bytes_sec as f64),
+                    cpu_view::format_rate(snap.disk_io.write_bytes_sec as f64),
+                ),
+                app::Metric::Pwr => {
+                    if let Some(w) = snap.power.system_watts {
+                        format!("PWR {w:.1}W")
+                    } else {
+                        "PWR --".into()
+                    }
+                }
+            };
 
-fn draw_overview(f: &mut Frame, area: Rect, snap: &SystemSnapshot, app: &App) {
-    // Split: CPU(40%) | right column [MEM + GPU + processes]
-    let cols = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(area);
+            let detail = Layout::vertical([Constraint::Length(5), Constraint::Min(0)])
+                .split(outer[1]);
 
-    // Left: CPU overview
-    cpu_view::draw_overview(f, cols[0], &snap.cpu, &app.cpu_history);
+            cpu_view::draw_sparkline_strip(f, detail[0], &strip_title, history, metric, is_pct);
 
-    // Right: MEM gauge + GPU + process table
-    let has_gpu = !snap.gpus.is_empty();
-    let right_constraints = if has_gpu {
-        vec![
-            Constraint::Length(3),
-            Constraint::Length(snap.gpus.len() as u16 * 3 + 2),
-            Constraint::Min(8),
-        ]
-    } else {
-        vec![Constraint::Length(3), Constraint::Min(8)]
-    };
-    let right = Layout::vertical(right_constraints).split(cols[1]);
-
-    // Memory gauge
-    draw_mem_gauge(f, right[0], snap);
-
-    if has_gpu {
-        gpu_view::draw(f, right[1], &snap.gpus);
-        process_view::draw(
-            f,
-            right[2],
-            &snap.processes,
-            app.sort_by,
-            app.proc_scroll,
-            app.filter_mode,
-            &app.filter_text,
-        );
-    } else {
-        process_view::draw(
-            f,
-            right[1],
-            &snap.processes,
-            app.sort_by,
-            app.proc_scroll,
-            app.filter_mode,
-            &app.filter_text,
-        );
+            process_view::draw(
+                f,
+                detail[1],
+                &snap.processes,
+                app.sort_by,
+                app.proc_scroll,
+                app.filter_mode,
+                &app.filter_text,
+            );
+        }
     }
-}
-
-fn draw_mem_gauge(f: &mut Frame, area: Rect, snap: &SystemSnapshot) {
-    let pct = snap.memory.ram_percent();
-    let block = Block::default()
-        .title(Span::styled(" Memory ", theme::TITLE))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(theme::BORDER);
-    let gauge = Gauge::default()
-        .block(block)
-        .gauge_style(ratatui::style::Style::new().fg(theme::percent_color(pct)))
-        .ratio((pct as f64 / 100.0).min(1.0))
-        .label(format!(
-            "{:.1}% ({}/{})",
-            pct,
-            format_bytes(snap.memory.used),
-            format_bytes(snap.memory.total)
-        ));
-    f.render_widget(gauge, area);
 }

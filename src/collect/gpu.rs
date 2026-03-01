@@ -1,4 +1,5 @@
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct GpuSnapshot {
     pub name: String,
     /// GPU utilization 0.0–100.0
@@ -14,6 +15,7 @@ pub struct GpuSnapshot {
 }
 
 impl GpuSnapshot {
+    #[allow(dead_code)]
     pub fn vram_percent(&self) -> f32 {
         if self.vram_total == 0 {
             return 0.0;
@@ -24,6 +26,12 @@ impl GpuSnapshot {
 
 pub trait GpuBackend: Send {
     fn collect(&mut self) -> Vec<GpuSnapshot>;
+    /// Per-process GPU memory usage: vec of (pid, gpu_mem_bytes)
+    fn process_gpu_usage(&mut self) -> Vec<(u32, u64)>;
+    /// System-wide power draw in watts (if available)
+    fn system_power_watts(&self) -> Option<f32> {
+        None
+    }
 }
 
 // --- NVIDIA backend (behind feature flag) ---
@@ -69,6 +77,31 @@ impl GpuBackend for NvidiaBackend {
             })
             .collect()
     }
+
+    fn process_gpu_usage(&mut self) -> Vec<(u32, u64)> {
+        let count = match self.nvml.device_count() {
+            Ok(c) => c,
+            Err(_) => return vec![],
+        };
+        let mut per_pid: std::collections::HashMap<u32, u64> = std::collections::HashMap::new();
+        for i in 0..count {
+            let dev = match self.nvml.device_by_index(i) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            if let Ok(procs) = dev.running_compute_processes() {
+                for p in procs {
+                    *per_pid.entry(p.pid).or_default() += p.used_gpu_memory.unwrap_or(0);
+                }
+            }
+            if let Ok(procs) = dev.running_graphics_processes() {
+                for p in procs {
+                    *per_pid.entry(p.pid).or_default() += p.used_gpu_memory.unwrap_or(0);
+                }
+            }
+        }
+        per_pid.into_iter().collect()
+    }
 }
 
 // --- NoGpu stub ---
@@ -77,6 +110,10 @@ pub struct NoGpu;
 
 impl GpuBackend for NoGpu {
     fn collect(&mut self) -> Vec<GpuSnapshot> {
+        vec![]
+    }
+
+    fn process_gpu_usage(&mut self) -> Vec<(u32, u64)> {
         vec![]
     }
 }
