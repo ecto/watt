@@ -1,7 +1,7 @@
 use ratatui::style::{Color, Modifier, Style};
 
 // Catppuccin Mocha palette
-const SURFACE0: Color = Color::Rgb(49, 50, 68);
+pub const SURFACE0: Color = Color::Rgb(49, 50, 68);
 pub const SURFACE1: Color = Color::Rgb(69, 71, 90);
 pub const TEXT: Color = Color::Rgb(205, 214, 244);
 const SUBTEXT1: Color = Color::Rgb(166, 173, 200);

@@ -38,19 +38,4 @@ impl<T: Clone + Default> RingBuffer<T> {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    pub fn last(&self) -> Option<&T> {
-        if self.len == 0 {
-            return None;
-        }
-        let idx = if self.head == 0 { self.cap - 1 } else { self.head - 1 };
-        Some(&self.buf[idx])
-    }
 }

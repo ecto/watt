@@ -6,10 +6,6 @@ pub struct MemorySnapshot {
     pub used: u64,
     /// Total RAM in bytes
     pub total: u64,
-    /// Used swap in bytes
-    pub swap_used: u64,
-    /// Total swap in bytes
-    pub swap_total: u64,
 }
 
 impl MemorySnapshot {
@@ -20,20 +16,12 @@ impl MemorySnapshot {
         self.used as f32 / self.total as f32 * 100.0
     }
 
-    pub fn swap_percent(&self) -> f32 {
-        if self.swap_total == 0 {
-            return 0.0;
-        }
-        self.swap_used as f32 / self.swap_total as f32 * 100.0
-    }
 }
 
 pub fn collect(sys: &System) -> MemorySnapshot {
     MemorySnapshot {
         used: sys.used_memory(),
         total: sys.total_memory(),
-        swap_used: sys.used_swap(),
-        swap_total: sys.total_swap(),
     }
 }
 
