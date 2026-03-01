@@ -8,6 +8,10 @@ pub struct Cli {
     /// Refresh interval in milliseconds
     #[arg(short, long, default_value = "100")]
     pub interval: u64,
+
+    /// Run Claude-powered system profile analysis on startup
+    #[arg(short, long)]
+    pub profile: bool,
 }
 
 impl Cli {

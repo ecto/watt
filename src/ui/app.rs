@@ -3,6 +3,7 @@ use ratatui::layout::Rect;
 
 use crate::collect::process::SortBy;
 use crate::collect::SystemSnapshot;
+use crate::profile::ProfileState;
 use crate::ui::sparkline::RingBuffer;
 
 const HISTORY_LEN: usize = 120;
@@ -11,6 +12,7 @@ const HISTORY_LEN: usize = 120;
 pub enum View {
     Chart,
     Processes,
+    Profile,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +73,11 @@ pub struct App {
     // Latest snapshot
     pub snapshot: Option<SystemSnapshot>,
 
+    // Profile mode
+    pub profile_state: ProfileState,
+    pub profile_scroll: usize,
+    pub profile_requested: bool,
+
     // Layout cache for mouse hit-testing (populated during draw)
     pub layout: LayoutCache,
 }
@@ -93,6 +100,9 @@ impl App {
             filter_mode: false,
             filter_text: String::new(),
             snapshot: None,
+            profile_state: ProfileState::Idle,
+            profile_scroll: 0,
+            profile_requested: false,
             layout: LayoutCache::default(),
         }
     }
@@ -202,16 +212,31 @@ impl App {
             _ => {}
         }
 
+        // Global: P (shift-p) triggers profile
+        if key.code == KeyCode::Char('P') {
+            self.trigger_profile();
+            return;
+        }
+
         match self.view {
             View::Chart => self.on_key_chart(key),
             View::Processes => self.on_key_processes(key),
+            View::Profile => self.on_key_profile(key),
         }
+    }
+
+    pub fn trigger_profile(&mut self) {
+        self.profile_state = ProfileState::Loading;
+        self.profile_scroll = 0;
+        self.profile_requested = true;
+        self.view = View::Profile;
     }
 
     pub fn on_mouse(&mut self, event: MouseEvent) {
         match self.view {
             View::Chart => self.on_mouse_chart(event),
             View::Processes => self.on_mouse_processes(event),
+            View::Profile => {} // no mouse handling for profile view
         }
     }
 
@@ -220,23 +245,31 @@ impl App {
         let y = event.row;
 
         match event.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
+            MouseEventKind::Moved | MouseEventKind::Drag(MouseButton::Left) => {
                 for &(metric, rect) in &self.layout.metric_rects {
                     if x >= rect.x
                         && x < rect.x + rect.width
                         && y >= rect.y
                         && y < rect.y + rect.height
                     {
-                        if metric == self.selected_metric {
-                            // Click on already-selected → drill down
-                            if let Some(sort) = metric.to_sort_by() {
-                                self.sort_by = sort;
-                            }
-                            self.proc_scroll = 0;
-                            self.view = View::Processes;
-                        } else {
-                            self.selected_metric = metric;
+                        self.selected_metric = metric;
+                        return;
+                    }
+                }
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Click on selected metric → drill down
+                for &(metric, rect) in &self.layout.metric_rects {
+                    if x >= rect.x
+                        && x < rect.x + rect.width
+                        && y >= rect.y
+                        && y < rect.y + rect.height
+                    {
+                        if let Some(sort) = metric.to_sort_by() {
+                            self.sort_by = sort;
                         }
+                        self.proc_scroll = 0;
+                        self.view = View::Processes;
                         return;
                     }
                 }
@@ -364,6 +397,25 @@ impl App {
             KeyCode::Char('/') => {
                 self.filter_mode = true;
                 self.filter_text.clear();
+            }
+            _ => {}
+        }
+    }
+
+    fn on_key_profile(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.view = View::Chart;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.profile_scroll = self.profile_scroll.saturating_add(1);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.profile_scroll = self.profile_scroll.saturating_sub(1);
+            }
+            KeyCode::Char('g') => self.profile_scroll = 0,
+            KeyCode::Char('G') => {
+                self.profile_scroll = usize::MAX; // clamped during render
             }
             _ => {}
         }
