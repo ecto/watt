@@ -6,7 +6,7 @@ use clap::Parser;
 #[command(name = "watt", about = "Unified system monitor")]
 pub struct Cli {
     /// Refresh interval in milliseconds
-    #[arg(short, long, default_value = "1000")]
+    #[arg(short, long, default_value = "100")]
     pub interval: u64,
 }
 
