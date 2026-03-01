@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::Span;
-use ratatui::widgets::{Block, BorderType, Borders, Gauge, Sparkline};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, BorderType, Borders, Gauge, Paragraph, Sparkline};
 use ratatui::Frame;
 
 use crate::ui::app::{App, Metric};
@@ -207,6 +207,91 @@ pub fn draw_sparkline_strip(
             .style(Style::new().fg(color));
         f.render_widget(spark, inner);
     }
+}
+
+/// Number of terminal rows needed for the core heatmap (borders + data rows).
+pub fn core_heatmap_height(core_count: usize) -> u16 {
+    2 + ((core_count + 1) / 2) as u16
+}
+
+/// Draw a scrolling 2D heatmap: rows = core pairs, columns = time, color = utilization.
+/// Uses Unicode half-block (▀) to pack 2 cores per terminal row via fg/bg coloring.
+pub fn draw_core_heatmap(
+    f: &mut Frame,
+    area: Rect,
+    per_core_history: &[RingBuffer<f32>],
+    core_count: usize,
+) {
+    let block = Block::default()
+        .title(Span::styled(
+            " Cores ",
+            Style::new().fg(theme::MAUVE).add_modifier(Modifier::BOLD),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(theme::MAUVE));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    if inner.height < 1 || inner.width < 1 || core_count == 0 {
+        return;
+    }
+
+    let width = inner.width as usize;
+    let row_pairs = (core_count + 1) / 2;
+
+    let lines: Vec<Line> = (0..row_pairs)
+        .map(|row| {
+            let upper_idx = row * 2;
+            let lower_idx = row * 2 + 1;
+            let has_lower = lower_idx < core_count;
+
+            let upper_data = per_core_history[upper_idx].as_vec();
+            let lower_data = if has_lower {
+                per_core_history[lower_idx].as_vec()
+            } else {
+                Vec::new()
+            };
+
+            let spans: Vec<Span> = (0..width)
+                .map(|col| {
+                    // Right-align: newest on right
+                    let upper_val = if upper_data.len() > width {
+                        upper_data[upper_data.len() - width + col]
+                    } else if col >= width - upper_data.len() {
+                        upper_data[col - (width - upper_data.len())]
+                    } else {
+                        0.0
+                    };
+
+                    let lower_val = if !has_lower {
+                        -1.0 // sentinel for "no core"
+                    } else if lower_data.len() > width {
+                        lower_data[lower_data.len() - width + col]
+                    } else if col >= width - lower_data.len() {
+                        lower_data[col - (width - lower_data.len())]
+                    } else {
+                        0.0
+                    };
+
+                    let fg = theme::percent_color(upper_val);
+                    let bg = if lower_val < 0.0 {
+                        theme::SURFACE0
+                    } else {
+                        theme::percent_color(lower_val)
+                    };
+
+                    Span::styled("\u{2580}", Style::new().fg(fg).bg(bg))
+                })
+                .collect();
+
+            Line::from(spans)
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(lines);
+    f.render_widget(paragraph, inner);
 }
 
 pub fn draw_chart(f: &mut Frame, area: Rect, app: &App) {
