@@ -65,13 +65,13 @@ ANTHROPIC_API_KEY=... watt -p     # auto-analyze on startup
 
 ### Apple Silicon GPU
 
-watt uses the same private IOReport API that Activity Monitor uses internally:
+<img src="assets/wat.png" width="80" align="right">
+
+macOS exposes GPU frequency residency counters through a private IOReport API — the same one Activity Monitor uses internally. watt subscribes to these counters and derives utilization from active-vs-idle time. No kernel extension, no entitlement, no sudo. Apple just left the door open.
 
 - **Utilization** from frequency residency states (active vs idle time)
 - **Power** from the Energy Model channel (millijoules → watts)
 - **Temperature** from SMC sensor keys (`Tg*` prefix)
-
-No elevated privileges. Just works.
 
 ### NVIDIA
 
