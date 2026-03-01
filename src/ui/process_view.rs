@@ -1,0 +1,96 @@
+use ratatui::layout::{Constraint, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::Span;
+use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
+use ratatui::Frame;
+
+use crate::collect::memory::format_bytes;
+use crate::collect::process::{ProcessSnapshot, SortBy};
+use crate::ui::theme;
+
+pub fn draw(
+    f: &mut Frame,
+    area: Rect,
+    procs: &[ProcessSnapshot],
+    sort_by: SortBy,
+    scroll: usize,
+    filter_mode: bool,
+    filter_text: &str,
+) {
+    let title = if filter_mode {
+        format!(" Processes — filter: /{}_ ", filter_text)
+    } else if !filter_text.is_empty() {
+        format!(" Processes — filter: {} (Esc clear) ", filter_text)
+    } else {
+        format!(" Processes [sort: {}] ", sort_by.label())
+    };
+
+    let block = Block::default()
+        .title(Span::styled(title, theme::TITLE))
+        .borders(Borders::ALL)
+        .border_style(theme::BORDER);
+
+    // Filter
+    let filtered: Vec<&ProcessSnapshot> = if filter_text.is_empty() {
+        procs.iter().collect()
+    } else {
+        let f_lower = filter_text.to_lowercase();
+        procs
+            .iter()
+            .filter(|p| p.name.to_lowercase().contains(&f_lower))
+            .collect()
+    };
+
+    // Sort indicator in header
+    let header_cells = [
+        ("PID", SortBy::Pid),
+        ("NAME", SortBy::Name),
+        ("CPU%", SortBy::Cpu),
+        ("MEM", SortBy::Memory),
+        ("STATUS", SortBy::Cpu), // no sort for status
+    ];
+
+    let header = Row::new(header_cells.iter().map(|(label, col)| {
+        let style = if *col == sort_by && *label != "STATUS" {
+            Style::new().fg(ratatui::style::Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            theme::LABEL
+        };
+        Cell::from(Span::styled(*label, style))
+    }))
+    .height(1);
+
+    let rows: Vec<Row> = filtered
+        .iter()
+        .map(|p| {
+            let cpu_style = theme::percent_style(p.cpu_percent);
+            Row::new(vec![
+                Cell::from(format!("{}", p.pid)),
+                Cell::from(p.name.clone()),
+                Cell::from(Span::styled(format!("{:.1}", p.cpu_percent), cpu_style)),
+                Cell::from(format_bytes(p.memory_bytes)),
+                Cell::from(Span::styled(&p.status, theme::MUTED)),
+            ])
+        })
+        .collect();
+
+    let widths = [
+        Constraint::Length(7),
+        Constraint::Min(20),
+        Constraint::Length(8),
+        Constraint::Length(8),
+        Constraint::Length(8),
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(block)
+        .row_highlight_style(theme::HIGHLIGHT);
+
+    let mut state = TableState::default();
+    if !filtered.is_empty() {
+        state.select(Some(scroll.min(filtered.len().saturating_sub(1))));
+    }
+
+    f.render_stateful_widget(table, area, &mut state);
+}
