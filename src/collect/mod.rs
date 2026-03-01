@@ -14,7 +14,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sysinfo::System;
+use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 use self::cpu::CpuSnapshot;
 use self::disk::{DiskIoCollector, DiskIoSnapshot};
@@ -50,8 +50,15 @@ pub fn spawn_collector(
         let mut net_collector = NetworkCollector::new();
         let mut disk_collector = DiskIoCollector::new();
 
+        let proc_refresh = ProcessRefreshKind::new()
+            .with_cpu()
+            .with_memory()
+            .with_exe(UpdateKind::OnlyIfNotSet);
+
         // First refresh to seed deltas
-        sys.refresh_all();
+        sys.refresh_cpu_all();
+        sys.refresh_memory();
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, proc_refresh);
         thread::sleep(Duration::from_millis(250));
 
         let mut last_tick = Instant::now();
@@ -61,7 +68,9 @@ pub fn spawn_collector(
             let dt_secs = start.duration_since(last_tick).as_secs_f64();
             last_tick = start;
 
-            sys.refresh_all();
+            sys.refresh_cpu_all();
+            sys.refresh_memory();
+            sys.refresh_processes_specifics(ProcessesToUpdate::All, true, proc_refresh);
 
             let gpus = gpu_backend.collect();
             let system_watts = gpu_backend.system_power_watts();
