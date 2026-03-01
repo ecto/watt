@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+pub mod apple_gpu;
 pub mod cpu;
 pub mod gpu;
 pub mod memory;

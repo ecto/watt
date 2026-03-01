@@ -88,5 +88,11 @@ pub fn default_backend() -> Box<dyn GpuBackend> {
             return Box::new(nv);
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(apple) = super::apple_gpu::AppleGpuBackend::try_new() {
+            return Box::new(apple);
+        }
+    }
     Box::new(NoGpu)
 }
