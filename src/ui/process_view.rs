@@ -1,7 +1,6 @@
 use ratatui::layout::{Constraint, Rect};
-use ratatui::style::{Modifier, Style};
 use ratatui::text::Span;
-use ratatui::widgets::{Block, Borders, Cell, Row, Table, TableState};
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Row, Table, TableState};
 use ratatui::Frame;
 
 use crate::collect::memory::format_bytes;
@@ -28,6 +27,7 @@ pub fn draw(
     let block = Block::default()
         .title(Span::styled(title, theme::TITLE))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme::BORDER);
 
     // Filter
@@ -52,7 +52,7 @@ pub fn draw(
 
     let header = Row::new(header_cells.iter().map(|(label, col)| {
         let style = if *col == sort_by && *label != "STATUS" {
-            Style::new().fg(ratatui::style::Color::Cyan).add_modifier(Modifier::BOLD)
+            theme::ACCENT
         } else {
             theme::LABEL
         };
@@ -62,15 +62,21 @@ pub fn draw(
 
     let rows: Vec<Row> = filtered
         .iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(i, p)| {
             let cpu_style = theme::percent_style(p.cpu_percent);
-            Row::new(vec![
+            let row = Row::new(vec![
                 Cell::from(format!("{}", p.pid)),
                 Cell::from(p.name.clone()),
                 Cell::from(Span::styled(format!("{:.1}", p.cpu_percent), cpu_style)),
                 Cell::from(format_bytes(p.memory_bytes)),
                 Cell::from(Span::styled(&p.status, theme::MUTED)),
-            ])
+            ]);
+            if i % 2 == 1 {
+                row.style(theme::ALT_ROW)
+            } else {
+                row
+            }
         })
         .collect();
 

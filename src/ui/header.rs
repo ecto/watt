@@ -1,4 +1,5 @@
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
@@ -14,13 +15,20 @@ pub fn draw(f: &mut Frame, area: Rect, snap: &SystemSnapshot) {
     let cpu_pct = snap.cpu.aggregate;
     let mem_pct = snap.memory.ram_percent();
 
+    let sep = Span::styled(" │ ", theme::MUTED);
+
     let line = Line::from(vec![
-        Span::styled(&snap.hostname, theme::TITLE),
-        Span::styled("  up ", theme::LABEL),
-        Span::raw(format!("{hours}h{mins:02}m")),
-        Span::styled("  cpu ", theme::LABEL),
+        Span::styled("⚡ ", theme::PEACH_STYLE),
+        Span::styled("watt", theme::ACCENT),
+        sep.clone(),
+        Span::styled(&snap.hostname, Style::new().fg(theme::TEXT)),
+        sep.clone(),
+        Span::styled(format!("up {hours}h{mins:02}m"), theme::LABEL),
+        sep.clone(),
+        Span::styled("cpu ", theme::LABEL),
         Span::styled(format!("{cpu_pct:.0}%"), theme::percent_style(cpu_pct)),
-        Span::styled("  mem ", theme::LABEL),
+        sep.clone(),
+        Span::styled("mem ", theme::LABEL),
         Span::styled(format!("{:.0}%", mem_pct), theme::percent_style(mem_pct)),
         Span::styled(
             format!(
@@ -30,8 +38,9 @@ pub fn draw(f: &mut Frame, area: Rect, snap: &SystemSnapshot) {
             ),
             theme::MUTED,
         ),
+        sep,
         Span::styled(
-            format!("  {} cores", snap.cpu.per_core.len()),
+            format!("{} cores", snap.cpu.per_core.len()),
             theme::MUTED,
         ),
     ]);

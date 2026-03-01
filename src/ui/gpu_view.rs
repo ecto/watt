@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Gauge, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Gauge, Paragraph};
 use ratatui::Frame;
 
 use crate::collect::gpu::GpuSnapshot;
@@ -12,16 +12,19 @@ pub fn draw(f: &mut Frame, area: Rect, gpus: &[GpuSnapshot]) {
     let block = Block::default()
         .title(Span::styled(" GPU ", theme::TITLE))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme::BORDER);
 
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     if gpus.is_empty() {
-        let msg = Paragraph::new(Line::from(Span::styled(
-            "No GPU detected (enable --features nvidia for NVIDIA)",
-            theme::MUTED,
-        )));
+        let msg_text = if cfg!(target_os = "macos") {
+            "No GPU metrics available"
+        } else {
+            "No GPU detected (enable --features nvidia for NVIDIA)"
+        };
+        let msg = Paragraph::new(Line::from(Span::styled(msg_text, theme::MUTED)));
         f.render_widget(msg, inner);
         return;
     }

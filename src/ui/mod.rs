@@ -14,9 +14,8 @@ use crossterm::terminal::{
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Modifier;
 use ratatui::text::Span;
-use ratatui::widgets::{Block, Borders, Gauge, Tabs};
+use ratatui::widgets::{Block, BorderType, Borders, Gauge, Tabs};
 use ratatui::Frame;
 use ratatui::Terminal;
 
@@ -100,13 +99,17 @@ fn draw_tabs(f: &mut Frame, area: Rect, active: Tab) {
             } else {
                 theme::TAB_INACTIVE
             };
-            Span::styled(format!(" {num}:{} ", t.label()), style)
+            if *t == active {
+                Span::styled(format!(" ● {num}:{} ", t.label()), style)
+            } else {
+                Span::styled(format!("   {num}:{} ", t.label()), style)
+            }
         })
         .collect();
 
     let tabs = Tabs::new(titles)
         .select(active.index())
-        .highlight_style(theme::TAB_ACTIVE.add_modifier(Modifier::UNDERLINED));
+        .highlight_style(theme::TAB_ACTIVE);
     f.render_widget(tabs, area);
 }
 
@@ -163,6 +166,7 @@ fn draw_mem_gauge(f: &mut Frame, area: Rect, snap: &SystemSnapshot) {
     let block = Block::default()
         .title(Span::styled(" Memory ", theme::TITLE))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme::BORDER);
     let gauge = Gauge::default()
         .block(block)

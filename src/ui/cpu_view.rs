@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::Span;
-use ratatui::widgets::{Block, Borders, Gauge, Sparkline};
+use ratatui::widgets::{Block, BorderType, Borders, Gauge, Sparkline};
 use ratatui::Frame;
 
 use crate::collect::cpu::CpuSnapshot;
@@ -12,6 +12,7 @@ pub fn draw_overview(f: &mut Frame, area: Rect, cpu: &CpuSnapshot, history: &Rin
     let block = Block::default()
         .title(Span::styled(" CPU ", theme::TITLE))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme::BORDER);
 
     let inner = block.inner(area);
@@ -49,6 +50,7 @@ pub fn draw_detail(
     let block = Block::default()
         .title(Span::styled(" CPU Cores ", theme::TITLE))
         .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
         .border_style(theme::BORDER);
 
     let inner = block.inner(area);
