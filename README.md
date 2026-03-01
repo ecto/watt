@@ -1,34 +1,24 @@
 <p align="center">
-  <img src="assets/hero.webp" alt="watt" width="400">
+  <img src="assets/hero.webp" alt="watt" width="600"><br>
+  <strong>watt</strong>
 </p>
 
-<h1 align="center">watt</h1>
+# watt
 
-<p align="center">
-  <strong>a terminal system monitor that actually knows your GPU exists</strong>
-</p>
+A terminal system monitor that actually knows your GPU exists.
 
-<p align="center">
-  <code>cargo install --path .</code>
-</p>
+```
+⚡ watt │ macbook │ up 4h32m │ cpu 12% │ mem 61% (19.2G/32.0G) │ 12 cores
+╭─────────────────────────────────────────────────────╮
+│ CPU 12.3%  ▁▂▁▃▂▁▂▅▃▂▁▁▂▃▅▇█▅▃▂▁▁▂▁▁▂▁▁▂▁▁▂▁▁▁▁ │
+│ MEM 61.0%  ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ │
+│ GPU 24.1%  ▁▁▁▂▃▅▃▂▁▁▃▅▇▅▃▂▁▁▁▂▃▂▁▁▁▁▁▁▁▁▁▁▁▂▃▂ │
+│ NET ↓1.2M  ▁▁▁▁▁▁▁▁▁▃▅█▅▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ │
+│ PWR 8.2W   ▂▂▂▃▃▂▂▃▅▃▂▂▂▂▃▅▇▅▃▂▂▂▃▂▂▃▂▂▃▂▂▂▂▂▂▂ │
+╰─────────────────────────────────────────────────────╯
+```
 
----
-
-You know that feeling when you open a system monitor and the GPU tab says "No GPU detected"? On your $3,000 MacBook Pro? With the chip Apple won't shut up about?
-
-**wat.**
-
-watt fixes that. Real-time CPU, memory, GPU, and power monitoring in your terminal. On Apple Silicon, it reads GPU utilization, power draw, and temperature directly from the hardware — no sudo, no kernel extensions, no nonsense.
-
-## Features
-
-- **CPU** — per-core utilization, frequency, temperature
-- **Memory** — RAM and swap usage
-- **GPU** — utilization %, power (watts), temperature
-  - Apple Silicon via IOReport + SMC (sudoless)
-  - NVIDIA via NVML (`--features nvidia`)
-- **Processes** — sortable by CPU/memory usage
-- **Power** — system power draw
+Real-time CPU, memory, GPU, network, disk, and power monitoring with per-core heatmaps, process grouping, and Claude-powered system analysis. Catppuccin Mocha theme. On Apple Silicon, reads GPU stats directly from the hardware — no sudo, no kernel extensions.
 
 ## Install
 
@@ -36,7 +26,7 @@ watt fixes that. Real-time CPU, memory, GPU, and power monitoring in your termin
 cargo install --path .
 ```
 
-For NVIDIA GPU support:
+NVIDIA GPU support:
 
 ```
 cargo install --path . --features nvidia
@@ -45,22 +35,84 @@ cargo install --path . --features nvidia
 ## Usage
 
 ```
-watt
+watt                              # launch
+watt -i 500                       # 500ms refresh interval
+ANTHROPIC_API_KEY=... watt -p     # auto-analyze on startup
 ```
 
-Navigate tabs with `1-5` or arrow keys. `q` to quit.
+## Keybinds
 
-## How it works on Apple Silicon
+| Key | Action |
+|-----|--------|
+| `j` `k` / `↑` `↓` | Navigate metrics / scroll |
+| `Enter` | Drill into process table |
+| `Esc` | Back / clear filter |
+| `/` | Filter processes |
+| `c` `m` `n` `p` | Sort by CPU / Memory / Name / PID |
+| `g` `G` | Jump to top / bottom |
+| `P` | Claude system profile |
+| `q` | Quit |
 
-watt uses the same private IOReport API that Apple's own Activity Monitor uses internally:
+## Views
 
-- **GPU utilization** from frequency residency states (how much time the GPU spends active vs idle)
-- **GPU power** from the Energy Model channel (millijoules per sample interval, converted to watts)
-- **GPU temperature** from SMC sensor keys (`Tg*` prefix)
-- **Chip info** from `system_profiler` + IORegistry DVFS tables
+**Chart** — sparkline per metric, auto-scaled. Select with j/k, drill down with Enter. Mouse hover highlights, click drills down, scroll wheel navigates.
 
-No elevated privileges required. Just works.
+**Processes** — grouped by name with summed metrics. 47 Chrome Helper PIDs become one row showing `Chrome Helper (×47)`. Sortable columns, filterable with `/`.
+
+**Profile** — press `P` from any view. Sends an aggregated snapshot to Claude (requires `ANTHROPIC_API_KEY`) and displays a plain-language analysis of what's running and why. Scrollable with j/k.
+
+## How It Works
+
+### Apple Silicon GPU
+
+watt uses the same private IOReport API that Activity Monitor uses internally:
+
+- **Utilization** from frequency residency states (active vs idle time)
+- **Power** from the Energy Model channel (millijoules → watts)
+- **Temperature** from SMC sensor keys (`Tg*` prefix)
+
+No elevated privileges. Just works.
+
+### NVIDIA
+
+NVML via the `nvidia` feature flag. Per-process GPU memory shown in the process table.
+
+### Process Aggregation
+
+Processes are grouped by name into `ProcessGroup` structs via a HashMap. Each group sums CPU%, memory, and GPU memory across all PIDs sharing that name. The table shows count, aggregated metrics, and a `×N` suffix.
+
+### Claude Profile
+
+`P` or `--profile` builds a text prompt from the current snapshot — system stats plus the top 50 aggregated processes — and POSTs to the Claude Messages API (`claude-sonnet-4-20250514`, 1024 tokens). The response streams into a scrollable view. Requires `ANTHROPIC_API_KEY` env var.
+
+## Source Layout
+
+```
+src/
+├── main.rs                 tokio select loop, channel wiring
+├── config.rs               CLI flags (clap)
+├── profile.rs              Claude API client, prompt builder
+├── collect/
+│   ├── mod.rs              snapshot collector (OS thread)
+│   ├── process.rs          ProcessSnapshot, ProcessGroup, aggregate
+│   ├── cpu.rs              per-core CPU
+│   ├── memory.rs           RAM/swap
+│   ├── gpu.rs              GpuBackend trait, NVIDIA impl
+│   ├── apple_gpu.rs        Apple Silicon IOReport backend
+│   ├── network.rs          rx/tx bytes
+│   ├── disk.rs             disk I/O
+│   └── power.rs            system power draw
+└── ui/
+    ├── mod.rs              terminal setup, draw dispatch
+    ├── app.rs              state machine, keybinds, mouse
+    ├── cpu_view.rs         sparklines, gauges, core heatmap
+    ├── process_view.rs     grouped process table
+    ├── profile_view.rs     Claude analysis view
+    ├── header.rs           status bar
+    ├── sparkline.rs        ring buffer
+    └── theme.rs            Catppuccin Mocha palette
+```
 
 ## License
 
-MIT
+[MIT](LICENSE)
