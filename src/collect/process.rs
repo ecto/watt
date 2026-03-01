@@ -6,6 +6,7 @@ pub struct ProcessSnapshot {
     pub name: String,
     pub cpu_percent: f32,
     pub memory_bytes: u64,
+    pub gpu_mem_bytes: u64,
     pub status: String,
 }
 
@@ -13,6 +14,7 @@ pub struct ProcessSnapshot {
 pub enum SortBy {
     Cpu,
     Memory,
+    Gpu,
     Pid,
     Name,
 }
@@ -22,6 +24,7 @@ impl SortBy {
         match self {
             SortBy::Cpu => "CPU%",
             SortBy::Memory => "MEM",
+            SortBy::Gpu => "GPU",
             SortBy::Pid => "PID",
             SortBy::Name => "NAME",
         }
@@ -39,6 +42,7 @@ pub fn collect(sys: &System, sort_by: SortBy, filter: Option<&str>) -> Vec<Proce
                 name: p.name().to_string_lossy().to_string(),
                 cpu_percent: p.cpu_usage(),
                 memory_bytes: p.memory(),
+                gpu_mem_bytes: 0,
                 status: format!("{:?}", p.status()),
             }
         })
@@ -52,6 +56,7 @@ pub fn collect(sys: &System, sort_by: SortBy, filter: Option<&str>) -> Vec<Proce
     match sort_by {
         SortBy::Cpu => procs.sort_by(|a, b| b.cpu_percent.partial_cmp(&a.cpu_percent).unwrap_or(std::cmp::Ordering::Equal)),
         SortBy::Memory => procs.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes)),
+        SortBy::Gpu => procs.sort_by(|a, b| b.gpu_mem_bytes.cmp(&a.gpu_mem_bytes)),
         SortBy::Pid => procs.sort_by(|a, b| a.pid.cmp(&b.pid)),
         SortBy::Name => procs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
     }

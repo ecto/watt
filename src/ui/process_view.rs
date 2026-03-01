@@ -47,6 +47,7 @@ pub fn draw(
         ("NAME", SortBy::Name),
         ("CPU%", SortBy::Cpu),
         ("MEM", SortBy::Memory),
+        ("GPU", SortBy::Gpu),
         ("STATUS", SortBy::Cpu), // no sort for status
     ];
 
@@ -65,11 +66,17 @@ pub fn draw(
         .enumerate()
         .map(|(i, p)| {
             let cpu_style = theme::percent_style(p.cpu_percent);
+            let gpu_text = if p.gpu_mem_bytes > 0 {
+                format_bytes(p.gpu_mem_bytes)
+            } else {
+                "-".to_string()
+            };
             let row = Row::new(vec![
                 Cell::from(format!("{}", p.pid)),
                 Cell::from(p.name.clone()),
                 Cell::from(Span::styled(format!("{:.1}", p.cpu_percent), cpu_style)),
                 Cell::from(format_bytes(p.memory_bytes)),
+                Cell::from(gpu_text),
                 Cell::from(Span::styled(&p.status, theme::MUTED)),
             ]);
             if i % 2 == 1 {
@@ -83,6 +90,7 @@ pub fn draw(
     let widths = [
         Constraint::Length(7),
         Constraint::Min(20),
+        Constraint::Length(8),
         Constraint::Length(8),
         Constraint::Length(8),
         Constraint::Length(8),
